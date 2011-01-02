@@ -1,38 +1,35 @@
 var graphviz = require('graphviz');
+var fs = require('fs');
+var path = require('path');
 var natives = process.binding('natives');
 var moduleName;
+var NODE_SRC_DIR = '/Users/nsy/Documents/src/node/lib';
+var regexStr = 'util\\.inherits\\(([a-zA-Z.]+), \\s*([a-zA-Z.]+)\\)';
+var regex = new RegExp(regexStr);
+var regexG = new RegExp(regexStr, 'g');
 
-var g = graphviz.digraph('G');
-g.set('rankdir', 'LR');
 
 var moduleAttr = {
-  fontname: quote('FreeSans.ttf'),
-  shape: 'record',
-  peripheries: 2,
-  fontsize: 24
+  shape: 'box',
+  fontsize: 12,
+  style: 'bold'
 };
 
 var classAttr = {
-  fontname: quote('FreeSans.ttf'),
-  shape: 'record',
-  fontsize: 20
-};
-
-var nodeAttr = {
-  fontname: quote('FreeSans.ttf'),
-  shape: 'record',
-  fontsize: 20
+  shape: 'box',
+  fontsize: 24,
+  style: 'bold'
 };
 
 var hasAttr = {
   dir: 'back',
-  color: quote('#8CACBB'),
+  color: quote('#0D3349'),
   fontsize: 20
 };
 
 var inheritAttr = {
   dir: 'back',
-  color: quote('#8CACBB'),
+  color: quote('#0D3349'),
   arrowtail: 'empty',
   fontsize: 20
 };
@@ -40,57 +37,61 @@ var inheritAttr = {
 
 //標準モジュールを検索
 (function main() {
-  for (moduleName in natives) {
-    g.addNode(moduleName, moduleAttr);
-    searchClass(moduleName, require(moduleName), null);
-  }
-  g.addNode('process', moduleAttr);
-  searchClass('process', process, null);
+  var graph = graphviz.digraph('G');
+  graph.set('rankdir', 'LR');
 
-  console.log(g.to_dot());
-  g.output('png', 'node-classes.png');
+  for (moduleName in natives) {
+    graph.addNode(moduleName, moduleAttr);
+    searchClass(graph, moduleName, require(moduleName), null);
+    searchParent(graph, moduleName);
+  }
+  graph.addNode('process', moduleAttr);
+  searchClass(graph, 'process', process, null);
+
+  //console.log(graph.to_dot());
+  graph.output('png', 'node-classes.jpg');
 })()
 
 //モジュール配下のクラスを検索
-function searchClass(targetName, targetObj) {
+function searchClass(graph, targetName, targetObj) {
   var classObj, className;
   for (className in targetObj) {
     classObj = targetObj[className];
     if (typeof classObj === 'function' && isClass(classObj)) {
       var classFullName = targetName+'.'+className;
-      if (!exists(g, classFullName)) {
-        g.addNode(quote(classFullName), nodeAttr);
+      if (!exists(graph, classFullName)) {
+        graph.addNode(quote(classFullName), classAttr);
       }
-      g.addEdge(quote(targetName), quote(classFullName), hasAttr)
-      if (classObj.super_) {
-        searchParent(classObj.super_, classFullName);
-      }
+      graph.addEdge(quote(targetName), quote(classFullName), hasAttr)
     }
   }
 }
 
-//親クラスを再帰的に検索
-function searchParent(obj, childName) {
-  //var parentName = childName+'.'+obj.name;
-  var parentName = normalize(childName, obj.name);
-    if (!exists(g, parentName)) {
-    g.addNode(quote(parentName), nodeAttr);
+//モジュール内のinherits宣言を検索して継承関係を取得
+function searchParent(graph, moduleName) {
+  var data = fs.readFileSync(path.join(NODE_SRC_DIR, moduleName+'.js'), 'utf-8');
+  var results = data.match(regexG);
+  if (results && results.length > 0) {
+    results.forEach(function(result) {
+      //console.log(moduleName+': '+result);
+      var res = result.match(regex);
+      if (res.length == 3) {
+        var child = res[1].indexOf('.') > -1 ? res[1] : moduleName+'.'+res[1];
+        var parent = res[2].indexOf('.') > -1        ? res[2]  :
+                           'Error' === res[2]        ? 'Error' :
+                           'Stream' === res[2]       ? 'stream.Stream' :
+                           'EventEmitter' === res[2] ? 'events.EventEmitter' :
+                           moduleName+'.'+res[2];
+        if (!exists(graph, child)) {
+          graph.addNode(quote(child), classAttr);
+        }
+        if (!exists(graph, parent)) {
+          graph.addNode(quote(parent), classAttr);
+        }
+        graph.addEdge(quote(parent), quote(child), inheritAttr)
+      }
+    });
   }
-  g.addEdge(quote(parentName), quote(childName), inheritAttr);
-
-  if (obj.super_) searchParent(obj.super_, parentName);
-}
-
-function normalize(childName, parentName) {
-  return ({
-      'net.Server < EventEmitter': 'events.EventEmitter',
-      'http.Server < Server': 'net.Server',
-      'http.IncomingMessage < Stream': 'stream.Stream',
-      'http.OutgoingMessage < Stream': 'stream.Stream',
-      'http.ServerResponse < OutgoingMessage': 'http.OutgoingMessage',
-      'http.ClientRequest < OutgoingMessage': 'http.OutgoingMessage',
-      'http.Client < Stream': 'net.Stream'
-  })[childName+' < '+parentName] || parentName;
 }
 
 function isClass(classObj) {
