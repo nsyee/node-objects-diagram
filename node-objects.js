@@ -3,11 +3,13 @@ var fs = require('fs');
 var path = require('path');
 var natives = process.binding('natives');
 var moduleName;
-var NODE_SRC_DIR = '/Users/nsy/Documents/src/node/lib';
+var NODE_SRC_DIR = '/Users/nsy/node/src/HEAD/lib'; // target source code
 var regexStr = 'util\\.inherits\\(([a-zA-Z.]+), \\s*([a-zA-Z.]+)\\)';
 var regex = new RegExp(regexStr);
 var regexG = new RegExp(regexStr, 'g');
-
+var withFunction = process.argv[2] === '-a'; //output all functions, not only Classes
+var fileFormat = 'png';
+var fileName = (withFunction ? 'node-objects-all' : 'node-objects') +'.'+fileFormat;
 
 var moduleAttr = {
   shape: 'box',
@@ -17,7 +19,13 @@ var moduleAttr = {
 
 var classAttr = {
   shape: 'box',
-  fontsize: 24,
+  fontsize: 20,
+  style: 'bold'
+};
+
+var funcAttr = {
+  shape: 'plaintext',
+  fontsize: 12,
   style: 'bold'
 };
 
@@ -42,27 +50,43 @@ var inheritAttr = {
 
   for (moduleName in natives) {
     graph.addNode(moduleName, moduleAttr);
-    searchClass(graph, moduleName, require(moduleName), null);
+    searchObject(graph, moduleName, require(moduleName));
     searchParent(graph, moduleName);
   }
   graph.addNode('process', moduleAttr);
-  searchClass(graph, 'process', process, null);
+  searchObject(graph, 'process', process);
 
   //console.log(graph.to_dot());
-  graph.output('png', 'node-classes.jpg');
+  graph.output(fileFormat, fileName);
 })()
 
-//モジュール配下のクラスを検索
-function searchClass(graph, targetName, targetObj) {
-  var classObj, className;
-  for (className in targetObj) {
-    classObj = targetObj[className];
-    if (typeof classObj === 'function' && isClass(classObj)) {
-      var classFullName = targetName+'.'+className;
-      if (!exists(graph, classFullName)) {
-        graph.addNode(quote(classFullName), classAttr);
+//モジュール配下のオブジェクトと関数を検索
+function searchObject(graph, targetName, targetObj) {
+  var obj, objName;
+
+  for (objName in targetObj) {
+    if (targetObj.hasOwnProperty(objName)) {
+      var attr = null;
+      obj = targetObj[objName];
+      if (typeof obj === 'function' && isClass(objName)) {
+        attr = classAttr;
       }
-      graph.addEdge(quote(targetName), quote(classFullName), hasAttr)
+      if (withFunction && isPublic(objName)) {
+        if (typeof obj === 'function') {
+          attr = funcAttr;
+          objName += '()';
+        }
+        else {
+          attr = funcAttr;
+        }
+      }
+      if (attr) {
+        var classFullName = targetName+'.'+objName;
+        if (!exists(graph, classFullName)) {
+          graph.addNode(quote(classFullName), attr);
+        }
+        graph.addEdge(quote(targetName), quote(classFullName), hasAttr)
+      }
     }
   }
 }
@@ -77,6 +101,7 @@ function searchParent(graph, moduleName) {
       var res = result.match(regex);
       if (res.length == 3) {
         var child = res[1].indexOf('.') > -1 ? res[1] : moduleName+'.'+res[1];
+        //hack
         var parent = res[2].indexOf('.') > -1        ? res[2]  :
                            'Error' === res[2]        ? 'Error' :
                            'Stream' === res[2]       ? 'stream.Stream' :
@@ -94,8 +119,27 @@ function searchParent(graph, moduleName) {
   }
 }
 
-function isClass(classObj) {
-  return classObj.name && classObj.name.match(/^[A-Z].+$/);
+//親クラスを再帰的に検索
+/** super_だと親クラス名だけでmodule名が取得できないので断念
+    super_ has only its parent class name. not sure how to get "moduleName.parentClassName".
+function searchParent(obj, childName) {
+  //var parentName = childName+'.'+obj.name;
+  var parentName = normalize(childName, obj.name);
+    if (!exists(g, parentName)) {
+    g.addNode(quote(parentName), nodeAttr);
+  }
+  g.addEdge(quote(parentName), quote(childName), inheritAttr);
+
+  if (obj.super_) searchParent(obj.super_, parentName);
+}
+**/
+
+function isClass(objName) {
+  return objName.match(/^[A-Z][a-z].+$/);
+}
+
+function isPublic(objName) {
+  return !objName.match(/^_.+$/);
 }
 
 function exists(graph, node) {
@@ -109,6 +153,3 @@ function exists(graph, node) {
 function quote(str) {
   return '"'+str+'"';
 }
-
-
-
