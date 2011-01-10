@@ -3,13 +3,13 @@ var fs = require('fs');
 var path = require('path');
 var natives = process.binding('natives');
 var moduleName;
-var NODE_SRC_DIR = '/Users/nsy/node/src/HEAD/lib'; // target source code
+var NODE_SRC_DIR = process.argv[2]; // path to target source code like '/Users/nsy/node/src/HEAD/lib'
 var regexStr = 'util\\.inherits\\(([a-zA-Z.]+), \\s*([a-zA-Z.]+)\\)';
 var regex = new RegExp(regexStr);
 var regexG = new RegExp(regexStr, 'g');
-var withFunction = process.argv[2] === '-a'; //output all functions, not only Classes
+var withAllProperties = process.argv[3] === '-a'; //outputs all properties in public, not only Classes
 var fileFormat = 'png';
-var fileName = (withFunction ? 'node-objects-all' : 'node-objects') +'.'+fileFormat;
+var fileName = (withAllProperties ? 'node-objects-all' : 'node-objects') +'.'+fileFormat;
 
 var moduleAttr = {
   shape: 'box',
@@ -71,7 +71,7 @@ function searchObject(graph, targetName, targetObj) {
       if (typeof obj === 'function' && isClass(objName)) {
         attr = classAttr;
       }
-      if (withFunction && isPublic(objName)) {
+      else if (withAllProperties && isPublic(objName)) {
         if (typeof obj === 'function') {
           attr = funcAttr;
           objName += '()';
