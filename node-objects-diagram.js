@@ -4,7 +4,7 @@ var path = require('path');
 var natives = process.binding('natives');
 var moduleName;
 var NODE_SRC_DIR = process.argv[2]; // path to target source code like '/Users/nsy/node/src/HEAD/lib'
-var regexStr = 'util\\.inherits\\(([a-zA-Z.]+), \\s*([a-zA-Z.]+)\\)';
+var regexStr = '(util\\.)?inherits\\(([a-zA-Z.]+), \\s*([a-zA-Z.]+)\\)';
 var regex = new RegExp(regexStr);
 var regexG = new RegExp(regexStr, 'g');
 var withAllProperties = process.argv[3] === '-a'; //outputs all properties in public, not only Classes
@@ -99,14 +99,14 @@ function searchParent(graph, moduleName) {
     results.forEach(function(result) {
       //console.log(moduleName+': '+result);
       var res = result.match(regex);
-      if (res.length == 3) {
-        var child = res[1].indexOf('.') > -1 ? res[1] : moduleName+'.'+res[1];
+      if (res.length == 4) {
+        var child = res[2].indexOf('.') > -1 ? res[2] : moduleName+'.'+res[2];
         //hack
-        var parent = res[2].indexOf('.') > -1        ? res[2]  :
-                           'Error' === res[2]        ? 'Error' :
-                           'Stream' === res[2]       ? 'stream.Stream' :
-                           'EventEmitter' === res[2] ? 'events.EventEmitter' :
-                           moduleName+'.'+res[2];
+        var parent = res[3].indexOf('.') > -1        ? res[3]  :
+                           'Error' === res[3]        ? 'Error' :
+                           'Stream' === res[3]       ? 'stream.Stream' :
+                           'EventEmitter' === res[3] ? 'events.EventEmitter' :
+                           moduleName+'.'+res[3];
         if (!exists(graph, child)) {
           graph.addNode(quote(child), classAttr);
         }
